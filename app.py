@@ -270,7 +270,7 @@ if len(df_frequent) > 0:
 
     st.dataframe(
         display_items,
-        use_container_width=True,
+        width="stretch",
         hide_index=True
     )
 
@@ -315,7 +315,7 @@ if len(df_rules) > 0:
 
     st.dataframe(
         rule_display,
-        use_container_width=True,
+        width="stretch",
         hide_index=True
     )
 
