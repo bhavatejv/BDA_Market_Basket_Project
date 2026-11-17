@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit as st
 import pandas as pd
 import os
 import ast
@@ -16,6 +15,26 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------
+# PATHS
+# ---------------------------------------------------------
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+ITEMSET_FILE = os.path.join(
+    BASE_DIR,
+    "results_spark",
+    "fp_growth_itemsets",
+    "part-00000.csv"
+)
+
+RULE_FILE = os.path.join(
+    BASE_DIR,
+    "results_spark",
+    "fp_growth_rules",
+    "part-00000.csv"
+)
+
+# ---------------------------------------------------------
 # CUSTOM CSS
 # ---------------------------------------------------------
 
@@ -23,476 +42,247 @@ st.markdown("""
 <style>
 
 .main {
-    background-color: #f5f7fb;
+    padding-top: 1rem;
 }
 
-.block-container {
-    padding-top: 1.5rem;
-    padding-bottom: 2rem;
-}
-
-.hero {
-    padding: 30px;
-    border-radius: 20px;
-    background: linear-gradient(135deg, #111827, #1f2937);
-    color: white;
-    margin-bottom: 25px;
-}
-
-.hero h1 {
+.title {
     font-size: 42px;
-    margin-bottom: 5px;
+    font-weight: 700;
+    margin-bottom: 0px;
 }
 
-.hero p {
+.subtitle {
     font-size: 18px;
-    color: #d1d5db;
+    color: #777;
+    margin-bottom: 30px;
 }
 
 .metric-card {
     background: white;
-    padding: 22px;
-    border-radius: 16px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.08);
-    border: 1px solid #e5e7eb;
+    padding: 20px;
+    border-radius: 12px;
+    border: 1px solid #ddd;
+    text-align: center;
 }
 
 .metric-title {
-    font-size: 14px;
-    color: #6b7280;
+    font-size: 15px;
+    color: #666;
 }
 
 .metric-value {
     font-size: 30px;
-    font-weight: 700;
-    color: #111827;
+    font-weight: bold;
 }
 
 .section-title {
     font-size: 26px;
-    font-weight: 700;
-    margin-top: 25px;
-    margin-bottom: 15px;
-}
-
-.insight {
-    background: white;
-    padding: 18px;
-    border-radius: 14px;
-    border-left: 5px solid #2563eb;
-    box-shadow: 0 3px 12px rgba(0,0,0,0.06);
-    margin-bottom: 12px;
+    font-weight: 650;
+    margin-top: 30px;
 }
 
 .footer {
     text-align: center;
-    color: #6b7280;
-    padding: 25px;
+    color: #777;
+    padding: 30px;
 }
 
 </style>
 """, unsafe_allow_html=True)
 
-
 # ---------------------------------------------------------
 # HEADER
 # ---------------------------------------------------------
 
-st.markdown("""
-<div class="hero">
+st.markdown(
+    '<div class="title">🛒 Market Basket Intelligence</div>',
+    unsafe_allow_html=True
+)
 
-<h1>🛒 Market Basket Intelligence</h1>
-
-<p>
-Big Data Analytics • Association Rule Mining • Apache Spark
-</p>
-
-<p>
-Discover hidden relationships between products and generate
-data-driven recommendations from transaction data.
-</p>
-
-</div>
-""", unsafe_allow_html=True)
-
+st.markdown(
+    '<div class="subtitle">Big Data Analytics using Apache Spark, FP-Growth and Association Rule Mining</div>',
+    unsafe_allow_html=True
+)
 
 # ---------------------------------------------------------
-# SIDEBAR
+# CHECK RESULTS
 # ---------------------------------------------------------
 
-with st.sidebar:
+if not os.path.exists(ITEMSET_FILE) or not os.path.exists(RULE_FILE):
 
-    st.header("⚙️ Dashboard Controls")
+    st.error("Spark results have not been generated yet.")
 
-    st.markdown("### Data Sources")
+    st.write("Expected files:")
 
-    frequent_path = "output/frequent_itemsets"
-    rules_path = "output/association_rules"
-
-    st.info(
-        "The dashboard automatically searches the Spark output "
-        "folders for CSV result files."
+    st.code(
+        f"{ITEMSET_FILE}\n{RULE_FILE}"
     )
 
-    st.markdown("---")
+    st.info(
+        "Run market_basket_spark_project.py first."
+    )
 
-    st.markdown("### 🔬 Technology Stack")
-
-    st.markdown("""
-    **Big Data**
-    - Apache Spark
-    - PySpark
-
-    **Analytics**
-    - Association Rule Mining
-    - Frequent Itemset Mining
-
-    **Visualization**
-    - Streamlit
-    - Pandas
-
-    **Language**
-    - Python
-    """)
-
-    st.markdown("---")
-
-    st.markdown("### 📌 Key Metrics")
-
-    st.write("• Support")
-    st.write("• Confidence")
-    st.write("• Lift")
-
-    st.markdown("---")
-
-    st.caption("BDA Academic Project")
-    st.caption("Market Basket Analysis")
-
-
-# ---------------------------------------------------------
-# FIND CSV FILES
-# ---------------------------------------------------------
-
-def find_csv(folder):
-
-    files = []
-
-    if os.path.exists(folder):
-
-        for root, dirs, filenames in os.walk(folder):
-
-            for filename in filenames:
-
-                if filename.lower().endswith(".csv"):
-
-                    files.append(
-                        os.path.join(root, filename)
-                    )
-
-    return files
-
-
-frequent_files = find_csv(frequent_path)
-rules_files = find_csv(rules_path)
-
+    st.stop()
 
 # ---------------------------------------------------------
 # LOAD DATA
 # ---------------------------------------------------------
 
-df_frequent = pd.DataFrame()
-df_rules = pd.DataFrame()
+try:
 
+    df_frequent = pd.read_csv(ITEMSET_FILE)
+    df_rules = pd.read_csv(RULE_FILE)
 
-if frequent_files:
+except Exception as e:
 
-    try:
-
-        df_frequent = pd.read_csv(
-            frequent_files[0]
-        )
-
-    except Exception as e:
-
-        st.error(
-            f"Unable to read frequent itemsets: {e}"
-        )
-
-
-if rules_files:
-
-    try:
-
-        df_rules = pd.read_csv(
-            rules_files[0]
-        )
-
-    except Exception as e:
-
-        st.error(
-            f"Unable to read association rules: {e}"
-        )
-
+    st.error("Unable to load Spark result files.")
+    st.exception(e)
+    st.stop()
 
 # ---------------------------------------------------------
-# KPI SECTION
+# CLEAN DATA
+# ---------------------------------------------------------
+
+def parse_items(value):
+
+    try:
+        return ast.literal_eval(value)
+    except:
+        return [str(value)]
+
+
+if "items" in df_frequent.columns:
+    df_frequent["items_list"] = df_frequent["items"].apply(parse_items)
+    df_frequent["Product"] = df_frequent["items_list"].apply(
+        lambda x: ", ".join(x)
+    )
+
+if "antecedent" in df_rules.columns:
+    df_rules["antecedent_list"] = df_rules["antecedent"].apply(parse_items)
+
+if "consequent" in df_rules.columns:
+    df_rules["consequent_list"] = df_rules["consequent"].apply(parse_items)
+
+if "antecedent" in df_rules.columns and "consequent" in df_rules.columns:
+
+    df_rules["Rule"] = (
+        df_rules["antecedent_list"].apply(lambda x: ", ".join(x))
+        + " → "
+        + df_rules["consequent_list"].apply(lambda x: ", ".join(x))
+    )
+
+# ---------------------------------------------------------
+# KEY METRICS
+# ---------------------------------------------------------
+
+frequent_itemsets_count = len(df_frequent)
+
+rules_count = len(df_rules)
+
+max_frequency = (
+    int(df_frequent["freq"].max())
+    if "freq" in df_frequent.columns and len(df_frequent) > 0
+    else 0
+)
+
+best_confidence = (
+    float(df_rules["confidence"].max()) * 100
+    if "confidence" in df_rules.columns and len(df_rules) > 0
+    else 0
+)
+
+# ---------------------------------------------------------
+# KPI CARDS
 # ---------------------------------------------------------
 
 st.markdown(
-    '<div class="section-title">📊 Project Overview</div>',
+    '<div class="section-title">📊 Key Metrics</div>',
     unsafe_allow_html=True
 )
 
-
 c1, c2, c3, c4 = st.columns(4)
 
-
 with c1:
-
-    st.markdown(
-        f"""
-        <div class="metric-card">
-
-        <div class="metric-title">
-        📦 Frequent Itemsets
-        </div>
-
-        <div class="metric-value">
-        {len(df_frequent)}
-        </div>
-
-        </div>
-        """,
-        unsafe_allow_html=True
+    st.metric(
+        "Frequent Itemsets",
+        frequent_itemsets_count
     )
-
 
 with c2:
-
-    st.markdown(
-        f"""
-        <div class="metric-card">
-
-        <div class="metric-title">
-        🔗 Association Rules
-        </div>
-
-        <div class="metric-value">
-        {len(df_rules)}
-        </div>
-
-        </div>
-        """,
-        unsafe_allow_html=True
+    st.metric(
+        "Association Rules",
+        rules_count
     )
-
 
 with c3:
-
-    if not df_frequent.empty:
-
-        freq_columns = [
-            c for c in df_frequent.columns
-            if c.lower() in ["freq", "frequency", "count"]
-        ]
-
-        if freq_columns:
-
-            value = df_frequent[
-                freq_columns[0]
-            ].max()
-
-        else:
-
-            value = "—"
-
-    else:
-
-        value = "—"
-
-
-    st.markdown(
-        f"""
-        <div class="metric-card">
-
-        <div class="metric-title">
-        📈 Maximum Frequency
-        </div>
-
-        <div class="metric-value">
-        {value}
-        </div>
-
-        </div>
-        """,
-        unsafe_allow_html=True
+    st.metric(
+        "Maximum Frequency",
+        f"{max_frequency:,}"
     )
-
 
 with c4:
-
-    if not df_rules.empty:
-
-        confidence_columns = [
-            c for c in df_rules.columns
-            if "confidence" in c.lower()
-        ]
-
-        if confidence_columns:
-
-            confidence = df_rules[
-                confidence_columns[0]
-            ].max()
-
-            try:
-
-                confidence = f"{float(confidence):.2f}"
-
-            except:
-
-                pass
-
-        else:
-
-            confidence = "—"
-
-    else:
-
-        confidence = "—"
-
-
-    st.markdown(
-        f"""
-        <div class="metric-card">
-
-        <div class="metric-title">
-        🎯 Best Confidence
-        </div>
-
-        <div class="metric-value">
-        {confidence}
-        </div>
-
-        </div>
-        """,
-        unsafe_allow_html=True
+    st.metric(
+        "Best Confidence",
+        f"{best_confidence:.2f}%"
     )
-
 
 # ---------------------------------------------------------
-# DATA STATUS
+# SIDEBAR
 # ---------------------------------------------------------
 
-st.markdown("---")
+st.sidebar.title("⚙️ Dashboard Controls")
 
-if df_frequent.empty and df_rules.empty:
+st.sidebar.markdown("### Data Sources")
 
-    st.warning(
-        "⚠️ Spark results have not been generated yet. "
-        "Run the Market Basket Spark program first."
-    )
+st.sidebar.success("Spark results loaded successfully")
 
-else:
+st.sidebar.markdown("### Technology Stack")
 
-    st.success(
-        "✅ Spark analysis results successfully loaded."
-    )
-
+st.sidebar.write("🔹 Apache Spark")
+st.sidebar.write("🔹 PySpark")
+st.sidebar.write("🔹 FP-Growth")
+st.sidebar.write("🔹 Association Rule Mining")
+st.sidebar.write("🔹 Streamlit")
+st.sidebar.write("🔹 Pandas")
 
 # ---------------------------------------------------------
 # FREQUENT ITEMSETS
 # ---------------------------------------------------------
 
 st.markdown(
-    '<div class="section-title">📦 Frequent Itemset Analysis</div>',
+    '<div class="section-title">🔬 Frequent Itemset Analysis</div>',
     unsafe_allow_html=True
 )
 
+if len(df_frequent) > 0:
 
-if not df_frequent.empty:
+    display_items = df_frequent.copy()
 
-    st.write(
-        "Frequent itemsets represent combinations of products "
-        "that appear together frequently in customer transactions."
-    )
-
-    # Identify frequency column
-
-    freq_columns = [
-        c for c in df_frequent.columns
-        if c.lower() in ["freq", "frequency", "count"]
-    ]
-
-    if freq_columns:
-
-        freq_col = freq_columns[0]
-
-        top_frequency = (
-            df_frequent
-            .sort_values(
-                freq_col,
-                ascending=False
-            )
-            .head(10)
+    if "Product" in display_items.columns:
+        display_items = display_items[
+            ["Product", "freq"]
+        ].rename(
+            columns={
+                "Product": "Itemset",
+                "freq": "Frequency"
+            }
         )
-
-        chart_data = top_frequency[
-            [freq_col]
-        ]
-
-        st.bar_chart(
-            chart_data
-        )
-
-
-    st.subheader("🔎 Filter Frequent Itemsets")
-
-    search = st.text_input(
-        "Search itemset",
-        placeholder="Example: Milk, Bread..."
-    )
-
-
-    filtered = df_frequent.copy()
-
-
-    if search:
-
-        mask = filtered.astype(
-            str
-        ).apply(
-            lambda row:
-            row.str.contains(
-                search,
-                case=False,
-                na=False
-            ).any(),
-            axis=1
-        )
-
-        filtered = filtered[mask]
-
 
     st.dataframe(
-        filtered,
+        display_items,
         use_container_width=True,
         hide_index=True
     )
 
+    st.markdown("### Top Frequent Itemsets")
 
-    st.download_button(
-        "⬇️ Download Frequent Itemsets",
-        filtered.to_csv(index=False),
-        "frequent_itemsets.csv",
-        "text/csv"
-    )
+    chart_data = display_items.head(10).set_index("Itemset")
+
+    st.bar_chart(chart_data["Frequency"])
 
 else:
 
-    st.info(
-        "No frequent itemset results available."
-    )
-
+    st.warning("No frequent itemsets found.")
 
 # ---------------------------------------------------------
 # ASSOCIATION RULES
@@ -503,296 +293,93 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+if len(df_rules) > 0:
 
-if not df_rules.empty:
+    rule_display = df_rules.copy()
 
-    st.write(
-        "Association rules identify relationships between products "
-        "and help discover potential cross-selling opportunities."
-    )
+    if "Rule" in rule_display.columns:
 
-
-    # Detect important columns
-
-    confidence_columns = [
-        c for c in df_rules.columns
-        if "confidence" in c.lower()
-    ]
-
-    lift_columns = [
-        c for c in df_rules.columns
-        if "lift" in c.lower()
-    ]
-
-    support_columns = [
-        c for c in df_rules.columns
-        if "support" in c.lower()
-    ]
-
-
-    # Rule metrics
-
-    r1, r2, r3 = st.columns(3)
-
-
-    with r1:
-
-        if support_columns:
-
-            support_value = pd.to_numeric(
-                df_rules[
-                    support_columns[0]
-                ],
-                errors="coerce"
-            ).max()
-
-            st.metric(
-                "📊 Maximum Support",
-                f"{support_value:.3f}"
-                if pd.notna(support_value)
-                else "—"
-            )
-
-        else:
-
-            st.metric(
-                "📊 Maximum Support",
-                "—"
-            )
-
-
-    with r2:
-
-        if confidence_columns:
-
-            confidence_value = pd.to_numeric(
-                df_rules[
-                    confidence_columns[0]
-                ],
-                errors="coerce"
-            ).max()
-
-            st.metric(
-                "🎯 Maximum Confidence",
-                f"{confidence_value:.3f}"
-                if pd.notna(confidence_value)
-                else "—"
-            )
-
-        else:
-
-            st.metric(
-                "🎯 Maximum Confidence",
-                "—"
-            )
-
-
-    with r3:
-
-        if lift_columns:
-
-            lift_value = pd.to_numeric(
-                df_rules[
-                    lift_columns[0]
-                ],
-                errors="coerce"
-            ).max()
-
-            st.metric(
-                "🚀 Maximum Lift",
-                f"{lift_value:.3f}"
-                if pd.notna(lift_value)
-                else "—"
-            )
-
-        else:
-
-            st.metric(
-                "🚀 Maximum Lift",
-                "—"
-            )
-
-
-    # Confidence chart
-
-    if confidence_columns:
-
-        st.subheader(
-            "🎯 Top Association Rules by Confidence"
-        )
-
-        chart_rules = df_rules.copy()
-
-        chart_rules[
-            confidence_columns[0]
-        ] = pd.to_numeric(
-            chart_rules[
-                confidence_columns[0]
-            ],
-            errors="coerce"
-        )
-
-        chart_rules = (
-            chart_rules
-            .sort_values(
-                confidence_columns[0],
-                ascending=False
-            )
-            .head(10)
-        )
-
-
-        st.bar_chart(
-            chart_rules[
-                [confidence_columns[0]]
+        rule_display = rule_display[
+            [
+                "Rule",
+                "support",
+                "confidence",
+                "lift"
             ]
-        )
-
-
-    # Search rules
-
-    st.subheader("🔎 Search Association Rules")
-
-    rule_search = st.text_input(
-        "Search product/rule",
-        placeholder="Example: Milk"
-    )
-
-
-    filtered_rules = df_rules.copy()
-
-
-    if rule_search:
-
-        mask = filtered_rules.astype(
-            str
-        ).apply(
-            lambda row:
-            row.str.contains(
-                rule_search,
-                case=False,
-                na=False
-            ).any(),
-            axis=1
-        )
-
-        filtered_rules = filtered_rules[
-            mask
         ]
 
+    rule_display = rule_display.sort_values(
+        by="confidence",
+        ascending=False
+    )
 
     st.dataframe(
-        filtered_rules,
+        rule_display,
         use_container_width=True,
         hide_index=True
     )
 
-
-    st.download_button(
-        "⬇️ Download Association Rules",
-        filtered_rules.to_csv(index=False),
-        "association_rules.csv",
-        "text/csv"
-    )
-
-
 else:
 
-    st.info(
-        "No association rule results available."
-    )
-
+    st.warning("No association rules found.")
 
 # ---------------------------------------------------------
-# BUSINESS INSIGHTS
+# TOP RULES
 # ---------------------------------------------------------
 
-st.markdown(
-    '<div class="section-title">💡 Business Insights</div>',
-    unsafe_allow_html=True
-)
+if len(df_rules) > 0:
 
+    st.markdown("### Top Association Rules")
 
-if not df_rules.empty:
+    top_rules = df_rules.sort_values(
+        by="confidence",
+        ascending=False
+    ).head(10)
 
-    if confidence_columns:
+    chart_data = top_rules.copy()
 
-        best_rule = df_rules.loc[
-            pd.to_numeric(
-                df_rules[
-                    confidence_columns[0]
-                ],
-                errors="coerce"
-            ).idxmax()
+    if "Rule" in chart_data.columns:
+
+        chart_data = chart_data[
+            ["Rule", "confidence"]
         ]
 
-        st.markdown(
-            """
-            <div class="insight">
-
-            <b>🎯 Recommendation Strength</b><br>
-
-            The rule with the highest confidence represents
-            one of the strongest purchasing relationships in
-            the dataset.
-
-            </div>
-            """,
-            unsafe_allow_html=True
+        chart_data["confidence"] = (
+            chart_data["confidence"] * 100
         )
 
+        chart_data = chart_data.set_index("Rule")
 
-    if lift_columns:
+        st.bar_chart(chart_data["confidence"])
 
-        lift_numeric = pd.to_numeric(
-            df_rules[
-                lift_columns[0]
-            ],
-            errors="coerce"
-        )
-
-        if not lift_numeric.empty:
-
-            best_lift = lift_numeric.max()
-
-            if best_lift > 1:
-
-                st.markdown(
-                    f"""
-                    <div class="insight">
-
-                    <b>🚀 Strong Product Association</b><br>
-
-                    The highest lift value is
-                    <b>{best_lift:.2f}</b>.
-
-                    A lift greater than 1 indicates a positive
-                    association between the products.
-
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-
+# ---------------------------------------------------------
+# BUSINESS APPLICATIONS
+# ---------------------------------------------------------
 
 st.markdown(
-    """
-    <div class="insight">
-
-    <b>🛍️ Business Applications</b><br>
-
-    • Product recommendation systems<br>
-    • Cross-selling strategies<br>
-    • Store shelf optimization<br>
-    • Promotional bundle creation<br>
-    • E-commerce recommendations<br>
-    • Customer purchase behavior analysis
-
-    </div>
-    """,
+    '<div class="section-title">💼 Business Applications</div>',
     unsafe_allow_html=True
 )
 
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.info(
+        "🛍️ **Product Bundling**\n\n"
+        "Identify products that are frequently purchased together."
+    )
+
+with col2:
+    st.info(
+        "🎯 **Cross Selling**\n\n"
+        "Recommend related products based on customer purchasing patterns."
+    )
+
+with col3:
+    st.info(
+        "📦 **Inventory Planning**\n\n"
+        "Use frequent purchasing patterns to improve stock planning."
+    )
 
 # ---------------------------------------------------------
 # METHODOLOGY
@@ -803,75 +390,63 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-
 m1, m2, m3, m4 = st.columns(4)
 
-
 with m1:
-
-    st.info(
-        """
-        **1️⃣ Data Collection**
-
-        Transaction data is collected
-        from the selected dataset.
-        """
+    st.markdown("### 1️⃣ Data Processing")
+    st.write(
+        "Cleaned transaction data and removed invalid records."
     )
-
 
 with m2:
-
-    st.info(
-        """
-        **2️⃣ Data Processing**
-
-        Apache Spark processes
-        large-scale transaction data.
-        """
+    st.markdown("### 2️⃣ Frequent Itemsets")
+    st.write(
+        "FP-Growth was used to discover frequently purchased item combinations."
     )
-
 
 with m3:
-
-    st.info(
-        """
-        **3️⃣ Pattern Mining**
-
-        Frequent itemsets and
-        association rules are generated.
-        """
+    st.markdown("### 3️⃣ Association Rules")
+    st.write(
+        "Association rules were generated using support, confidence and lift."
     )
-
 
 with m4:
-
-    st.info(
-        """
-        **4️⃣ Insights**
-
-        Results are converted into
-        useful business recommendations.
-        """
+    st.markdown("### 4️⃣ Visualization")
+    st.write(
+        "Streamlit provides an interactive dashboard for analysis."
     )
 
+# ---------------------------------------------------------
+# METRICS EXPLANATION
+# ---------------------------------------------------------
+
+st.markdown(
+    '<div class="section-title">📌 Important Metrics</div>',
+    unsafe_allow_html=True
+)
+
+st.write(
+    "**Support:** Measures how frequently an itemset occurs in transactions."
+)
+
+st.write(
+    "**Confidence:** Measures how often the consequent occurs when the antecedent occurs."
+)
+
+st.write(
+    "**Lift:** Measures how strongly two products are associated compared with random occurrence."
+)
 
 # ---------------------------------------------------------
 # FOOTER
 # ---------------------------------------------------------
 
-st.markdown("---")
-
 st.markdown(
     """
     <div class="footer">
-
-    🛒 <b>Market Basket Intelligence</b><br>
-
-    Big Data Analytics Project • Apache Spark • PySpark • Streamlit
-
+        BDA Academic Project | Market Basket Analysis<br>
+        Apache Spark • PySpark • FP-Growth • Streamlit
     </div>
     """,
     unsafe_allow_html=True
 )
-
-

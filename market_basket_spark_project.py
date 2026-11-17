@@ -1,622 +1,1129 @@
-
-"""
-BDA CSE557 - Market Basket Analysis for Retail Sales Optimization
-
-Based on:
-P. Kumar, K.N. Manisha, M. Nivetha,
-"Market Basket Analysis for Retail Sales Optimization",
-ICETITE 2024,
-DOI: 10.1109/IC-ETITE58242.2024.10493283.
-
-Run:
-    py -m pip install pyspark pandas numpy matplotlib
-
-    py market_basket_spark_project.py
-
-Default input:
-    data/simulated_retail_transactions.csv
-
-Output:
-    results_spark/
-"""
-import csv
-import json
-import shutil
 import os
-import sys
-import time
-from itertools import combinations
-
-# ============================================================
-# 1. PYTHON AND SPARK CONFIGURATION FOR WINDOWS
-# ============================================================
-
-os.environ["PYSPARK_PYTHON"] = sys.executable
-os.environ["PYSPARK_DRIVER_PYTHON"] = sys.executable
-os.environ["SPARK_LOCAL_IP"] = "127.0.0.1"
-
-from pyspark.sql import SparkSession, functions as F
-from pyspark.ml.fpm import FPGrowth
+import json
+import pandas as pd
+import streamlit as st
 
 
 # ============================================================
-# 2. PROJECT CONFIGURATION
+# PAGE CONFIGURATION
 # ============================================================
 
-INPUT_PATH = os.environ.get(
-    "INPUT_PATH",
-    "data/simulated_retail_transactions.csv"
-)
-
-OUTPUT_DIR = os.environ.get(
-    "OUTPUT_DIR",
-    "results_spark"
-)
-
-MIN_SUPPORT = float(
-    os.environ.get("MIN_SUPPORT", "0.05")
-)
-
-MIN_CONFIDENCE = float(
-    os.environ.get("MIN_CONFIDENCE", "0.40")
+st.set_page_config(
+    page_title="Market Basket Intelligence",
+    page_icon="🛒",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 
 # ============================================================
-# 3. CREATE SPARK SESSION
+# PROJECT PATHS
 # ============================================================
 
-print("\n============================================")
-print(" MARKET BASKET ANALYSIS - SPARK PROJECT")
-print("============================================\n")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-print("Python executable:", sys.executable)
-print("Python version:", sys.version)
-
-spark = (
-    SparkSession.builder
-    .appName("CSE557-Market-Basket-Analysis")
-    .master("local[2]")
-    .config("spark.driver.host", "127.0.0.1")
-    .config("spark.driver.bindAddress", "127.0.0.1")
-    .config("spark.python.worker.reuse", "true")
-    .config("spark.network.timeout", "300s")
-    .config("spark.executor.heartbeatInterval", "60s")
-    .config("spark.sql.shuffle.partitions", "4")
-    .getOrCreate()
+ITEMSET_FILE = os.path.join(
+    BASE_DIR,
+    "results_spark",
+    "fp_growth_itemsets",
+    "part-00000.csv"
 )
 
-spark.sparkContext.setLogLevel("WARN")
-
-print("Spark version:", spark.version)
-print("Spark session created successfully!")
-
-
-try:
-
-    # ========================================================
-    # 4. DATA INGESTION
-    # ========================================================
-
-    print("\n========== DATA INGESTION ==========\n")
-
-    if not os.path.exists(INPUT_PATH):
-        raise FileNotFoundError(
-            f"Input CSV file not found: {INPUT_PATH}\n"
-            "Please check your data folder and INPUT_PATH."
-        )
-
-    raw = (
-        spark.read
-        .option("header", True)
-        .option("inferSchema", True)
-        .csv(INPUT_PATH)
-    )
-
-    print("Raw schema:")
-    raw.printSchema()
-
-    raw_count = raw.count()
-
-    print("Total raw rows:", raw_count)
+RULE_FILE = os.path.join(
+    BASE_DIR,
+    "results_spark",
+    "fp_growth_rules",
+    "part-00000.csv"
+)
 
 
-    # ========================================================
-    # 5. DATA CLEANING AND PREPROCESSING
-    # ========================================================
+# ============================================================
+# CSS
+# ============================================================
 
-    print("\n========== DATA CLEANING ==========\n")
+st.markdown(
+    """
+    <style>
 
-    required_columns = {
-        "InvoiceNo",
-        "Description",
-        "Quantity",
-        "UnitPrice",
-        "InvoiceDate"
+    .block-container {
+        max-width: 1400px;
+        padding-top: 2rem;
+        padding-bottom: 3rem;
     }
 
-    missing_columns = required_columns - set(raw.columns)
+    .hero {
+        padding: 2rem;
+        border-radius: 18px;
+        margin-bottom: 1.5rem;
+        background: linear-gradient(
+            135deg,
+            #111827,
+            #1f2937,
+            #374151
+        );
+        color: white;
+    }
 
-    if missing_columns:
-        raise ValueError(
-            f"Missing required CSV columns: {missing_columns}"
-        )
+    .hero h1 {
+        font-size: 3rem;
+        margin-bottom: 0.5rem;
+    }
 
-    df = (
-        raw
-        .withColumn(
-            "InvoiceNo",
-            F.col("InvoiceNo").cast("string")
-        )
-        .withColumn(
-            "Description",
-            F.trim(F.col("Description").cast("string"))
-        )
-        .withColumn(
-            "Quantity",
-            F.col("Quantity").cast("double")
-        )
-        .withColumn(
-            "UnitPrice",
-            F.col("UnitPrice").cast("double")
-        )
-        .withColumn(
-            "InvoiceDate",
-            F.to_timestamp("InvoiceDate")
-        )
-        .dropDuplicates()
-        .filter(F.col("InvoiceNo").isNotNull())
-        .filter(F.col("Description").isNotNull())
-        .filter(F.col("Description") != "")
-        .filter(F.col("Quantity") > 0)
-        .filter(F.col("UnitPrice") >= 0)
-        .withColumn(
-            "Revenue",
-            F.col("Quantity") * F.col("UnitPrice")
-        )
-        .withColumn(
-            "YearMonth",
-            F.date_format("InvoiceDate", "yyyy-MM")
-        )
+    .hero p {
+        font-size: 1.1rem;
+        color: #d1d5db;
+    }
+
+    .metric-card {
+        padding: 1.2rem;
+        border-radius: 15px;
+        border: 1px solid #e5e7eb;
+        background: white;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.06);
+        text-align: center;
+    }
+
+    .metric-title {
+        font-size: 0.9rem;
+        color: #6b7280;
+    }
+
+    .metric-value {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #111827;
+    }
+
+    .section-title {
+        font-size: 1.6rem;
+        font-weight: 700;
+        margin-top: 1.8rem;
+        margin-bottom: 1rem;
+    }
+
+    .insight-box {
+        padding: 1rem 1.2rem;
+        border-radius: 12px;
+        background: #f9fafb;
+        border-left: 5px solid #374151;
+        margin-bottom: 0.8rem;
+    }
+
+    .footer {
+        text-align: center;
+        color: #6b7280;
+        padding: 2rem 0;
+        margin-top: 3rem;
+    }
+
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+
+# ============================================================
+# HEADER
+# ============================================================
+
+st.markdown(
+    """
+    <div class="hero">
+
+        <h1>🛒 Market Basket Intelligence</h1>
+
+        <p>
+            Big Data Analytics • Association Rule Mining • Apache Spark
+        </p>
+
+        <p>
+            Discover hidden relationships between products and generate
+            data-driven recommendations from transaction data.
+        </p>
+
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+
+# ============================================================
+# SIDEBAR
+# ============================================================
+
+with st.sidebar:
+
+    st.header("⚙️ Dashboard Controls")
+
+    st.markdown("### Data Sources")
+
+    st.info(
+        "The dashboard loads the CSV files generated by Apache Spark."
     )
 
-    clean_count = df.count()
+    st.markdown("### 🔬 Technology Stack")
 
-    print("Clean rows:", clean_count)
-    print("Removed rows:", raw_count - clean_count)
+    st.markdown(
+        """
+        **Big Data**
 
+        - Apache Spark
+        - PySpark
 
-    # ========================================================
-    # 6. PRODUCT SALES ANALYSIS
-    # ========================================================
+        **Analytics**
 
-    print("\n========== PRODUCT SALES ANALYSIS ==========\n")
+        - Association Rule Mining
+        - Frequent Itemset Mining
 
-    top_products = (
-        df.groupBy("Description")
-        .agg(
-            F.countDistinct("InvoiceNo").alias("Transactions"),
-            F.sum("Quantity").alias("Units"),
-            F.sum("Revenue").alias("Revenue")
-        )
-        .orderBy(F.desc("Transactions"))
+        **Visualization**
+
+        - Streamlit
+        - Pandas
+
+        **Language**
+
+        - Python
+        """
     )
 
-    print("Top 10 products:")
-    top_products.show(10, truncate=False)
+    st.markdown("---")
+
+    st.markdown("### 📌 Key Metrics")
+
+    st.write("• Support")
+    st.write("• Confidence")
+    st.write("• Lift")
+
+    st.markdown("---")
+
+    st.caption("BDA Academic Project")
+    st.caption("Market Basket Analysis")
 
 
-    # ========================================================
-    # 7. MONTHLY REVENUE ANALYSIS
-    # ========================================================
+# ============================================================
+# LOAD SPARK RESULTS
+# ============================================================
 
-    print("\n========== MONTHLY REVENUE ANALYSIS ==========\n")
-
-    monthly_revenue = (
-        df.groupBy("YearMonth")
-        .agg(
-            F.sum("Revenue").alias("Revenue")
-        )
-        .orderBy("YearMonth")
-    )
-
-    print("Monthly revenue:")
-    monthly_revenue.show(20, truncate=False)
+df_frequent = pd.DataFrame()
+df_rules = pd.DataFrame()
 
 
-    # ========================================================
-    # 8. TRANSACTION BASKET CREATION
-    # ========================================================
+itemsets_loaded = False
+rules_loaded = False
 
-    print("\n========== TRANSACTION BASKETS ==========\n")
 
-    transactions = (
-        df.groupBy("InvoiceNo")
-        .agg(
-            F.array_sort(
-                F.array_distinct(
-                    F.collect_list("Description")
-                )
-            ).alias("items")
-        )
-        .filter(F.size("items") >= 2)
-        .cache()
-    )
+# ============================================================
+# LOAD FREQUENT ITEMSETS
+# ============================================================
 
-    transaction_count = transactions.count()
+if os.path.exists(ITEMSET_FILE):
 
-    print(
-        "Transactions with at least 2 unique items:",
-        transaction_count
-    )
+    try:
 
-    if transaction_count == 0:
-        raise ValueError(
-            "No transactions contain at least two unique products."
+        df_frequent = pd.read_csv(
+            ITEMSET_FILE
         )
 
+        itemsets_loaded = True
 
-    # ========================================================
-    # 9. FP-GROWTH ALGORITHM
-    # ========================================================
+    except Exception as e:
 
-    print("\n========== FP-GROWTH ALGORITHM ==========\n")
-
-    start = time.perf_counter()
-
-    fp = FPGrowth(
-        itemsCol="items",
-        minSupport=MIN_SUPPORT,
-        minConfidence=MIN_CONFIDENCE
-    )
-
-    fp_model = fp.fit(transactions)
-
-    fp_freq = (
-        fp_model.freqItemsets
-        .orderBy(F.desc("freq"))
-    )
-
-    fp_rules = (
-        fp_model.associationRules
-        .orderBy(
-            F.desc("lift"),
-            F.desc("confidence")
+        st.error(
+            f"Error reading frequent itemsets: {e}"
         )
+
+else:
+
+    st.error(
+        f"Frequent itemset file not found:\n{ITEMSET_FILE}"
     )
 
-    fp_elapsed = time.perf_counter() - start
 
-    print("FP-Growth frequent itemsets:")
-    fp_freq.show(20, truncate=False)
+# ============================================================
+# LOAD ASSOCIATION RULES
+# ============================================================
 
-    print("FP-Growth association rules:")
-    fp_rules.show(20, truncate=False)
+if os.path.exists(RULE_FILE):
 
-    print("FP-Growth execution time:", round(fp_elapsed, 4), "seconds")
+    try:
 
-
-    # ========================================================
-    # 10. APRIORI AND ECLAT BASELINE
-    # ========================================================
-
-    print("\n========== APRIORI AND ECLAT ==========\n")
-
-    sample_limit = min(transaction_count, 2000)
-
-    # Collect a bounded sample from Spark to the driver.
-    # toLocalIterator avoids explicitly converting the DataFrame
-    # into an RDD and applying a Python map operation.
-
-    sample_baskets = [
-        row["items"]
-        for row in (
-            transactions
-            .limit(sample_limit)
-            .select("items")
-            .toLocalIterator()
+        df_rules = pd.read_csv(
+            RULE_FILE
         )
-    ]
 
-    print("Sample baskets:", len(sample_baskets))
+        rules_loaded = True
 
+    except Exception as e:
 
-    # --------------------------------------------------------
-    # APRIORI PAIR IMPLEMENTATION
-    # --------------------------------------------------------
+        st.error(
+            f"Error reading association rules: {e}"
+        )
 
-    def apriori_pairs(baskets, min_support):
+else:
 
-        n = len(baskets)
-
-        if n == 0:
-            return {}
-
-        pair_counts = {}
-
-        for basket in baskets:
-
-            unique_items = set(basket)
-
-            for a, b in combinations(
-                sorted(unique_items), 2
-            ):
-
-                pair = (a, b)
-
-                pair_counts[pair] = (
-                    pair_counts.get(pair, 0) + 1
-                )
-
-        frequent_pairs = {
-            pair: count
-            for pair, count in pair_counts.items()
-            if count / n >= min_support
-        }
-
-        return frequent_pairs
+    st.error(
+        f"Association rule file not found:\n{RULE_FILE}"
+    )
 
 
-    # --------------------------------------------------------
-    # ECLAT PAIR IMPLEMENTATION
-    # --------------------------------------------------------
+# ============================================================
+# FORMAT ITEM LISTS
+# ============================================================
 
-    def eclat_pairs(baskets, min_support):
+def format_items(value):
 
-        n = len(baskets)
+    try:
 
-        if n == 0:
-            return {}
+        if pd.isna(value):
 
-        # Vertical representation:
-        # item -> set of transaction IDs
+            return ""
 
-        tidsets = {}
+        text = str(value).strip()
 
-        for tid, basket in enumerate(baskets):
+        if text.startswith("[") and text.endswith("]"):
 
-            for item in set(basket):
+            try:
 
-                tidsets.setdefault(
-                    item, set()
-                ).add(tid)
-
-        items = sorted(tidsets.keys())
-
-        frequent_pairs = {}
-
-        for i, a in enumerate(items):
-
-            for b in items[i + 1:]:
-
-                intersection = (
-                    tidsets[a] & tidsets[b]
+                parsed = json.loads(
+                    text.replace("'", '"')
                 )
 
-                support_count = len(intersection)
+                if isinstance(parsed, list):
 
-                if support_count / n >= min_support:
-
-                    frequent_pairs[(a, b)] = (
-                        support_count
+                    return ", ".join(
+                        str(x) for x in parsed
                     )
 
-        return frequent_pairs
+            except Exception:
+
+                text = (
+                    text
+                    .replace("[", "")
+                    .replace("]", "")
+                    .replace("'", "")
+                    .replace('"', "")
+                )
+
+                return text
+
+        return text
+
+    except Exception:
+
+        return str(value)
+
+
+# ============================================================
+# FORMAT DATA
+# ============================================================
+
+if itemsets_loaded:
+
+    if "items" in df_frequent.columns:
+
+        df_frequent["Itemset"] = (
+            df_frequent["items"]
+            .apply(format_items)
+        )
+
+
+if rules_loaded:
+
+    if "antecedent" in df_rules.columns:
+
+        df_rules["If Customer Buys"] = (
+            df_rules["antecedent"]
+            .apply(format_items)
+        )
+
+    if "consequent" in df_rules.columns:
+
+        df_rules["Recommend"] = (
+            df_rules["consequent"]
+            .apply(format_items)
+        )
+
+
+# ============================================================
+# STATUS
+# ============================================================
+
+if itemsets_loaded and rules_loaded:
+
+    st.success(
+        "✅ Spark analysis results successfully loaded."
+    )
+
+else:
+
+    st.warning(
+        "⚠️ One or more Spark result files could not be loaded."
+    )
+
+
+# ============================================================
+# PROJECT OVERVIEW
+# ============================================================
+
+st.markdown(
+    '<div class="section-title">📊 Project Overview</div>',
+    unsafe_allow_html=True
+)
+
+
+col1, col2, col3, col4 = st.columns(4)
+
+
+# KPI VALUES
+
+frequent_count = len(df_frequent)
+
+rules_count = len(df_rules)
+
+
+if (
+    not df_frequent.empty
+    and "freq" in df_frequent.columns
+):
+
+    max_frequency = int(
+        df_frequent["freq"].max()
+    )
+
+else:
+
+    max_frequency = 0
+
+
+if (
+    not df_rules.empty
+    and "confidence" in df_rules.columns
+):
+
+    best_confidence = (
+        df_rules["confidence"].max()
+    )
+
+else:
+
+    best_confidence = 0
+
+
+# KPI 1
+
+with col1:
+
+    st.markdown(
+        f"""
+        <div class="metric-card">
+
+            <div class="metric-title">
+                📦 Frequent Itemsets
+            </div>
+
+            <div class="metric-value">
+                {frequent_count}
+            </div>
+
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+
+# KPI 2
+
+with col2:
+
+    st.markdown(
+        f"""
+        <div class="metric-card">
+
+            <div class="metric-title">
+                🔗 Association Rules
+            </div>
+
+            <div class="metric-value">
+                {rules_count}
+            </div>
+
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+
+# KPI 3
+
+with col3:
+
+    st.markdown(
+        f"""
+        <div class="metric-card">
+
+            <div class="metric-title">
+                📈 Maximum Frequency
+            </div>
+
+            <div class="metric-value">
+                {max_frequency:,}
+            </div>
+
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+
+# KPI 4
+
+with col4:
+
+    st.markdown(
+        f"""
+        <div class="metric-card">
+
+            <div class="metric-title">
+                🎯 Best Confidence
+            </div>
+
+            <div class="metric-value">
+                {best_confidence * 100:.2f}%
+            </div>
+
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+
+# ============================================================
+# FREQUENT ITEMSETS
+# ============================================================
+
+st.markdown(
+    '<div class="section-title">📦 Frequent Itemset Analysis</div>',
+    unsafe_allow_html=True
+)
+
+
+if not df_frequent.empty:
+
+    search_item = st.text_input(
+        "🔎 Search products",
+        placeholder="Example: Milk"
+    )
+
+
+    display_frequent = df_frequent.copy()
+
+
+    if search_item:
+
+        display_frequent = display_frequent[
+            display_frequent["Itemset"]
+            .str.contains(
+                search_item,
+                case=False,
+                na=False
+            )
+        ]
+
+
+    display_frequent = (
+        display_frequent
+        .sort_values(
+            "freq",
+            ascending=False
+        )
+    )
+
+
+    # Table
+
+    st.dataframe(
+        display_frequent[
+            ["Itemset", "freq"]
+        ].rename(
+            columns={
+                "freq": "Frequency"
+            }
+        ),
+        use_container_width=True,
+        hide_index=True
+    )
+
+
+    # Chart
+
+    st.markdown(
+        "### 📊 Top Frequent Itemsets"
+    )
+
+
+    chart_data = (
+        display_frequent
+        .head(10)
+        .set_index("Itemset")
+        [["freq"]]
+    )
+
+
+    st.bar_chart(
+        chart_data
+    )
+
+
+    # Download
+
+    st.download_button(
+        label="⬇️ Download Frequent Itemsets",
+        data=display_frequent.to_csv(
+            index=False
+        ),
+        file_name="frequent_itemsets.csv",
+        mime="text/csv"
+    )
+
+
+else:
+
+    st.info(
+        "No frequent itemset results available."
+    )
+
+
+# ============================================================
+# ASSOCIATION RULES
+# ============================================================
+
+st.markdown(
+    '<div class="section-title">🔗 Association Rule Analysis</div>',
+    unsafe_allow_html=True
+)
+
+
+if not df_rules.empty:
+
+    display_rules = df_rules.copy()
 
 
     # --------------------------------------------------------
-    # EXECUTION AND PERFORMANCE COMPARISON
+    # FILTERS
     # --------------------------------------------------------
 
-    t0 = time.perf_counter()
+    filter1, filter2, filter3 = st.columns(3)
 
-    apr = apriori_pairs(
-        sample_baskets,
-        MIN_SUPPORT
+
+    with filter1:
+
+        min_confidence = st.slider(
+            "Minimum Confidence",
+            0.0,
+            1.0,
+            0.40,
+            0.05
+        )
+
+
+    with filter2:
+
+        min_lift = st.number_input(
+            "Minimum Lift",
+            min_value=0.0,
+            value=1.0,
+            step=0.1
+        )
+
+
+    with filter3:
+
+        min_support = st.slider(
+            "Minimum Support",
+            0.0,
+            1.0,
+            0.05,
+            0.01
+        )
+
+
+    # Apply filters
+
+    display_rules = display_rules[
+        display_rules["confidence"]
+        >= min_confidence
+    ]
+
+
+    display_rules = display_rules[
+        display_rules["lift"]
+        >= min_lift
+    ]
+
+
+    display_rules = display_rules[
+        display_rules["support"]
+        >= min_support
+    ]
+
+
+    display_rules = (
+        display_rules
+        .sort_values(
+            ["lift", "confidence"],
+            ascending=False
+        )
     )
 
-    apr_time = time.perf_counter() - t0
+
+    if not display_rules.empty:
+
+        # ----------------------------------------------------
+        # RULE TABLE
+        # ----------------------------------------------------
+
+        table = display_rules.copy()
 
 
-    t0 = time.perf_counter()
+        table["Confidence"] = (
+            table["confidence"] * 100
+        ).round(2).astype(str) + "%"
 
-    ecl = eclat_pairs(
-        sample_baskets,
-        MIN_SUPPORT
+
+        table["Lift"] = (
+            table["lift"].round(2)
+        )
+
+
+        table["Support"] = (
+            table["support"].round(4)
+        )
+
+
+        st.dataframe(
+            table[
+                [
+                    "If Customer Buys",
+                    "Recommend",
+                    "Support",
+                    "Confidence",
+                    "Lift"
+                ]
+            ],
+            use_container_width=True,
+            hide_index=True
+        )
+
+
+        # ----------------------------------------------------
+        # CONFIDENCE CHART
+        # ----------------------------------------------------
+
+        st.markdown(
+            "### 🎯 Top Rules by Confidence"
+        )
+
+
+        confidence_chart = (
+            display_rules
+            .sort_values(
+                "confidence",
+                ascending=False
+            )
+            .head(10)
+            .copy()
+        )
+
+
+        confidence_chart["Rule"] = (
+            confidence_chart[
+                "If Customer Buys"
+            ]
+            + " → "
+            + confidence_chart[
+                "Recommend"
+            ]
+        )
+
+
+        confidence_chart["Confidence %"] = (
+            confidence_chart["confidence"]
+            * 100
+        )
+
+
+        st.bar_chart(
+            confidence_chart
+            .set_index("Rule")
+            [["Confidence %"]]
+        )
+
+
+        # ----------------------------------------------------
+        # LIFT CHART
+        # ----------------------------------------------------
+
+        st.markdown(
+            "### 📈 Top Rules by Lift"
+        )
+
+
+        lift_chart = (
+            display_rules
+            .sort_values(
+                "lift",
+                ascending=False
+            )
+            .head(10)
+            .copy()
+        )
+
+
+        lift_chart["Rule"] = (
+            lift_chart[
+                "If Customer Buys"
+            ]
+            + " → "
+            + lift_chart[
+                "Recommend"
+            ]
+        )
+
+
+        st.bar_chart(
+            lift_chart
+            .set_index("Rule")
+            [["lift"]]
+        )
+
+
+        # ----------------------------------------------------
+        # DOWNLOAD
+        # ----------------------------------------------------
+
+        st.download_button(
+            label="⬇️ Download Association Rules",
+            data=display_rules.to_csv(
+                index=False
+            ),
+            file_name="association_rules.csv",
+            mime="text/csv"
+        )
+
+
+    else:
+
+        st.warning(
+            "No association rules match the selected filters."
+        )
+
+
+else:
+
+    st.info(
+        "No association rule results available."
     )
 
-    ecl_time = time.perf_counter() - t0
 
+# ============================================================
+# BUSINESS INSIGHTS
+# ============================================================
 
-    print("\nApriori Results:")
-    print("Frequent pairs:", len(apr))
-    print("Execution time:", round(apr_time, 4), "seconds")
-
-
-    print("\nEclat Results:")
-    print("Frequent pairs:", len(ecl))
-    print("Execution time:", round(ecl_time, 4), "seconds")
-
-
-    print("\nFP-Growth Results:")
-    print("Execution time:", round(fp_elapsed, 4), "seconds")
-
-
-    # ========================================================
-    # 11. SAVE OUTPUT FILES
-    # ========================================================
-
-   # ========================================================
-# 11. SAVE OUTPUT FILES (WINDOWS COMPATIBLE)
-# ========================================================
-
-print("\n========== SAVING RESULTS ==========\n")
-
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-
-def save_dataframe_csv(dataframe, folder_name):
-
-    output_path = os.path.join(OUTPUT_DIR, folder_name)
-    # Remove previous output if it exists
-    if os.path.exists(output_path):
-        shutil.rmtree(output_path)
-
-    os.makedirs(output_path, exist_ok=True)
-
-    csv_file = os.path.join(
-        output_path,
-        "part-00000.csv"
-    )
-
-    with open(
-        csv_file,
-        "w",
-        newline="",
-        encoding="utf-8-sig"
-    ) as file:
-
-        writer = csv.writer(file)
-
-        # Write column headers
-        writer.writerow(dataframe.columns)
-
-        # Write Spark DataFrame rows using local Python CSV
-        for row in dataframe.toLocalIterator():
-
-            values = []
-
-            for value in row:
-
-                if value is None:
-                    values.append("")
-                     elif isinstance(value, (list, tuple, dict)):
-                    values.append(json.dumps(value))
-
-                else:
-                    values.append(value)
-
-            writer.writerow(values)
-
-    print("Saved:", csv_file)
-
-
-# Save top products
-save_dataframe_csv(
-    top_products,
-    "top_products"
+st.markdown(
+    '<div class="section-title">💡 Business Insights</div>',
+    unsafe_allow_html=True
 )
-# Save monthly revenue
-save_dataframe_csv(
-    monthly_revenue,
-    "monthly_revenue"
-)
 
-# Save FP-Growth frequent itemsets
-save_dataframe_csv(
-    fp_freq,
-    "fp_growth_itemsets"
-)
 
-# Save FP-Growth association rules
-save_dataframe_csv(
-    fp_rules,
-    "fp_growth_rules"
+if not df_rules.empty:
+
+    # Strongest lift
+
+    best_lift_rule = (
+        df_rules
+        .sort_values(
+            "lift",
+            ascending=False
+        )
+        .iloc[0]
     )
 
-print("\nAll CSV files saved successfully!")
 
-  
+    # Highest confidence
 
-    # ========================================================
-    # 12. SAVE PERFORMANCE REPORT
-    # ========================================================
-
-    performance_file = os.path.join(
-        OUTPUT_DIR,
-        "performance.txt"
+    best_conf_rule = (
+        df_rules
+        .sort_values(
+            "confidence",
+            ascending=False
+        )
+        .iloc[0]
     )
 
-    with open(
-        performance_file,
-        "w",
-        encoding="utf-8"
-    ) as f:
 
-        f.write("MARKET BASKET ANALYSIS PERFORMANCE REPORT\n")
-        f.write("=" * 50 + "\n\n")
+    # Strongest association
 
-        f.write(f"Python version: {sys.version}\n")
-        f.write(f"Spark version: {spark.version}\n")
+    st.markdown(
+        f"""
+        <div class="insight-box">
 
-        f.write(f"Raw rows: {raw_count}\n")
-        f.write(f"Clean rows: {clean_count}\n")
+            <strong>
+                🔥 Strongest Association
+            </strong>
 
-        f.write(
-            f"Transactions with >=2 items: {transaction_count}\n"
-        )
+            <br><br>
 
-        f.write(
-            f"Sample size for Apriori/Eclat: {sample_limit}\n"
-        )
+            Customers buying
 
-        f.write(
-            f"Minimum support: {MIN_SUPPORT}\n"
-        )
+            <strong>
+                {best_lift_rule["If Customer Buys"]}
+            </strong>
 
-        f.write(
-            f"Minimum confidence: {MIN_CONFIDENCE}\n"
-        )
+            are strongly associated with
 
-        f.write(
-            f"Apriori frequent pairs: {len(apr)}\n"
-        )
+            <strong>
+                {best_lift_rule["Recommend"]}
+            </strong>.
 
-        f.write(
-            f"Eclat frequent pairs: {len(ecl)}\n"
-        )
+            <br><br>
 
-        f.write(
-            f"Apriori execution time: {apr_time:.6f} seconds\n"
-        )
+            Lift:
 
-        f.write(
-            f"Eclat execution time: {ecl_time:.6f} seconds\n"
-        )
+            <strong>
+                {best_lift_rule["lift"]:.2f}
+            </strong>
 
-        f.write(
-            f"FP-Growth execution time: {fp_elapsed:.6f} seconds\n"
-        )
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 
-    # ========================================================
-    # 13. PROJECT COMPLETION
-    # ========================================================
+    # Highest confidence
 
-    print("\n============================================")
-    print(" MARKET BASKET ANALYSIS COMPLETED SUCCESSFULLY")
-    print("============================================")
+    st.markdown(
+        f"""
+        <div class="insight-box">
 
-    print("\nGenerated output folders:")
+            <strong>
+                🎯 Highest Confidence Rule
+            </strong>
 
-    print(os.path.join(OUTPUT_DIR, "top_products"))
-    print(os.path.join(OUTPUT_DIR, "monthly_revenue"))
-    print(os.path.join(OUTPUT_DIR, "fp_growth_itemsets"))
-    print(os.path.join(OUTPUT_DIR, "fp_growth_rules"))
-    print(performance_file)
+            <br><br>
 
-    print("\nAll results saved successfully!")
+            When customers buy
+
+            <strong>
+                {best_conf_rule["If Customer Buys"]}
+            </strong>,
+
+            the probability of buying
+
+            <strong>
+                {best_conf_rule["Recommend"]}
+            </strong>
+
+            is approximately
+
+            <strong>
+                {best_conf_rule["confidence"] * 100:.2f}%
+            </strong>.
+
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 
-finally:
+    # Business recommendation
 
-    # ========================================================
-    # 14. CLEANUP
-    # ========================================================
+    st.markdown(
+        """
+        <div class="insight-box">
 
-    transactions.unpersist() if "transactions" in locals() else None
+            <strong>
+                🛍️ Business Recommendation
+            </strong>
 
-    spark.stop()
+            <br><br>
 
-    print("\nSpark session stopped.")
+            These product relationships can be used for
+            product bundling, cross-selling, recommendation
+            systems, promotional placement and store shelf
+            optimization.
 
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+
+# ============================================================
+# BUSINESS APPLICATIONS
+# ============================================================
+
+st.markdown(
+    "### 🛍️ Business Applications"
+)
+
+
+app_col1, app_col2 = st.columns(2)
+
+
+with app_col1:
+
+    st.markdown(
+        """
+        • Product recommendation systems
+
+        • Cross-selling strategies
+
+        • Store shelf optimization
+        """
+    )
+
+
+with app_col2:
+
+    st.markdown(
+        """
+        • Promotional bundle creation
+
+        • E-commerce recommendations
+
+        • Customer purchase behavior analysis
+        """
+    )
+
+
+# ============================================================
+# METHODOLOGY
+# ============================================================
+
+st.markdown(
+    '<div class="section-title">🧠 Project Methodology</div>',
+    unsafe_allow_html=True
+)
+
+
+with st.expander(
+    "View Project Methodology"
+):
+
+    st.markdown(
+        """
+        ### 1️⃣ Data Collection
+
+        Transaction data is collected from the selected
+        retail dataset.
+
+        ### 2️⃣ Data Processing
+
+        Apache Spark processes the transaction data and
+        removes invalid records.
+
+        ### 3️⃣ Transaction Basket Creation
+
+        Products purchased within the same transaction
+        are grouped into baskets.
+
+        ### 4️⃣ Pattern Mining
+
+        FP-Growth identifies frequent itemsets and
+        association rules.
+
+        ### 5️⃣ Rule Evaluation
+
+        The rules are evaluated using:
+
+        - Support
+        - Confidence
+        - Lift
+
+        ### 6️⃣ Algorithm Comparison
+
+        FP-Growth is compared with bounded Apriori
+        and Eclat implementations.
+
+        ### 7️⃣ Business Insights
+
+        The results can support:
+
+        - Cross-selling
+        - Product bundling
+        - Recommendation systems
+        - Store placement
+        - Promotional strategies
+        """
+    )
+
+
+# ============================================================
+# PROJECT INFORMATION
+# ============================================================
+
+st.markdown(
+    '<div class="section-title">📚 Project Information</div>',
+    unsafe_allow_html=True
+)
+
+
+info1, info2 = st.columns(2)
+
+
+with info1:
+
+    st.markdown(
+        """
+        **Project:** Market Basket Analysis
+
+        **Domain:** Big Data Analytics
+
+        **Framework:** Apache Spark / PySpark
+
+        **Algorithm:** FP-Growth
+
+        **Baseline Algorithms:** Apriori and Eclat
+        """
+    )
+
+
+with info2:
+
+    st.markdown(
+        """
+        **Visualization:** Streamlit
+
+        **Data Processing:** Pandas + PySpark
+
+        **Minimum Support:** 5%
+
+        **Minimum Confidence:** 40%
+
+        **Output:** Spark-generated CSV results
+        """
+    )
+
+
+# ============================================================
+# FOOTER
+# ============================================================
+
+st.markdown(
+    """
+    <div class="footer">
+
+        <hr>
+
+        <p>
+            🛒 <strong>Market Basket Intelligence</strong>
+        </p>
+
+        <p>
+            Big Data Analytics Project • Apache Spark • PySpark • Streamlit
+        </p>
+
+    </div>
+    """,
+    unsafe_allow_html=True
+)

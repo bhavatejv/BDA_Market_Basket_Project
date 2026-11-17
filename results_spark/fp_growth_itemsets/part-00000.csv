@@ -1,0 +1,35 @@
+﻿items,freq
+"[""Milk""]",2107
+"[""Bread""]",1703
+"[""Coffee""]",1508
+"[""Sugar""]",1314
+"[""Cooking Oil""]",1148
+"[""Tea""]",1126
+"[""Salt""]",1113
+"[""Spices""]",1052
+"[""Butter""]",971
+"[""Bread"", ""Milk""]",958
+"[""Coffee"", ""Milk""]",832
+"[""Rice""]",823
+"[""Wheat Flour""]",764
+"[""Cereal""]",727
+"[""Butter"", ""Bread""]",699
+"[""Pasta""]",699
+"[""Biscuits""]",672
+"[""Sugar"", ""Coffee""]",631
+"[""Tea"", ""Sugar""]",566
+"[""Salt"", ""Cooking Oil""]",551
+"[""Rice"", ""Cooking Oil""]",526
+"[""Rice"", ""Salt""]",523
+"[""Cereal"", ""Milk""]",495
+"[""Rice"", ""Salt"", ""Cooking Oil""]",484
+"[""Spices"", ""Cooking Oil""]",474
+"[""Wheat Flour"", ""Cooking Oil""]",441
+"[""Wheat Flour"", ""Spices""]",440
+"[""Spices"", ""Salt""]",428
+"[""Wheat Flour"", ""Spices"", ""Cooking Oil""]",392
+"[""Pasta"", ""Salt""]",390
+"[""Pasta"", ""Spices""]",388
+"[""Eggs""]",383
+"[""Biscuits"", ""Tea""]",364
+"[""Pasta"", ""Spices"", ""Salt""]",336

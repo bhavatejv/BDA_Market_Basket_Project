@@ -1,0 +1,16 @@
+MARKET BASKET ANALYSIS PERFORMANCE REPORT
+==================================================
+
+Python version: 3.12.6 (tags/v3.12.6:a4a2d2b, Sep  6 2024, 20:11:23) [MSC v.1940 64 bit (AMD64)]
+Spark version: 4.3.0
+Raw rows: 16146
+Clean rows: 16111
+Transactions with >=2 items: 4999
+Sample size for Apriori/Eclat: 2000
+Minimum support: 0.05
+Minimum confidence: 0.4
+Apriori frequent pairs: 17
+Eclat frequent pairs: 17
+Apriori execution time: 0.023626 seconds
+Eclat execution time: 0.045131 seconds
+FP-Growth execution time: 5.593760 seconds
