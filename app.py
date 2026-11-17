@@ -1,4 +1,4 @@
-import streamlit as st
+﻿import streamlit as st
 import pandas as pd
 import os
 import ast
@@ -9,7 +9,7 @@ import ast
 
 st.set_page_config(
     page_title="Market Basket Intelligence",
-    page_icon="🛒",
+    page_icon="MB",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -94,15 +94,12 @@ st.markdown("""
 # HEADER
 # ---------------------------------------------------------
 
-st.markdown(
-    '<div class="title">🛒 Market Basket Intelligence</div>',
-    unsafe_allow_html=True
-)
 
-st.markdown(
-    '<div class="subtitle">Big Data Analytics using Apache Spark, FP-Growth and Association Rule Mining</div>',
-    unsafe_allow_html=True
-)
+st.title("Market Basket Intelligence")
+
+
+
+st.caption("Big Data Analytics using Apache Spark, FP-Growth and Association Rule Mining")
 
 # ---------------------------------------------------------
 # CHECK RESULTS
@@ -167,7 +164,7 @@ if "antecedent" in df_rules.columns and "consequent" in df_rules.columns:
 
     df_rules["Rule"] = (
         df_rules["antecedent_list"].apply(lambda x: ", ".join(x))
-        + " → "
+        + " -> "
         + df_rules["consequent_list"].apply(lambda x: ", ".join(x))
     )
 
@@ -195,10 +192,10 @@ best_confidence = (
 # KPI CARDS
 # ---------------------------------------------------------
 
-st.markdown(
-    '<div class="section-title">📊 Key Metrics</div>',
-    unsafe_allow_html=True
-)
+
+st.header("Key Metrics")
+
+
 
 c1, c2, c3, c4 = st.columns(4)
 
@@ -230,7 +227,7 @@ with c4:
 # SIDEBAR
 # ---------------------------------------------------------
 
-st.sidebar.title("⚙️ Dashboard Controls")
+st.sidebar.title("Dashboard Controls")
 
 st.sidebar.markdown("### Data Sources")
 
@@ -238,21 +235,16 @@ st.sidebar.success("Spark results loaded successfully")
 
 st.sidebar.markdown("### Technology Stack")
 
-st.sidebar.write("🔹 Apache Spark")
-st.sidebar.write("🔹 PySpark")
-st.sidebar.write("🔹 FP-Growth")
-st.sidebar.write("🔹 Association Rule Mining")
-st.sidebar.write("🔹 Streamlit")
-st.sidebar.write("🔹 Pandas")
+st.sidebar.write("Visualization")
 
 # ---------------------------------------------------------
 # FREQUENT ITEMSETS
 # ---------------------------------------------------------
 
-st.markdown(
-    '<div class="section-title">🔬 Frequent Itemset Analysis</div>',
-    unsafe_allow_html=True
-)
+
+st.header("Frequent Itemset Analysis")
+
+
 
 if len(df_frequent) > 0:
 
@@ -288,10 +280,10 @@ else:
 # ASSOCIATION RULES
 # ---------------------------------------------------------
 
-st.markdown(
-    '<div class="section-title">🔗 Association Rule Analysis</div>',
-    unsafe_allow_html=True
-)
+
+st.header("Association Rule Analysis")
+
+
 
 if len(df_rules) > 0:
 
@@ -356,28 +348,28 @@ if len(df_rules) > 0:
 # BUSINESS APPLICATIONS
 # ---------------------------------------------------------
 
-st.markdown(
-    '<div class="section-title">💼 Business Applications</div>',
-    unsafe_allow_html=True
-)
+
+st.header("Business Applications")
+
+
 
 col1, col2, col3 = st.columns(3)
 
 with col1:
     st.info(
-        "🛍️ **Product Bundling**\n\n"
+        "Product Bundling\n\n"
         "Identify products that are frequently purchased together."
     )
 
 with col2:
     st.info(
-        "🎯 **Cross Selling**\n\n"
+        "Cross Selling\n\n"
         "Recommend related products based on customer purchasing patterns."
     )
 
 with col3:
     st.info(
-        "📦 **Inventory Planning**\n\n"
+        "Inventory Planning\n\n"
         "Use frequent purchasing patterns to improve stock planning."
     )
 
@@ -385,45 +377,44 @@ with col3:
 # METHODOLOGY
 # ---------------------------------------------------------
 
-st.markdown(
-    '<div class="section-title">🧠 Project Methodology</div>',
-    unsafe_allow_html=True
-)
+
+st.header("Project Methodology")
+
+
 
 m1, m2, m3, m4 = st.columns(4)
 
 with m1:
-    st.markdown("### 1️⃣ Data Processing")
+    st.markdown("### 1. Data Processing")
     st.write(
         "Cleaned transaction data and removed invalid records."
     )
 
 with m2:
-    st.markdown("### 2️⃣ Frequent Itemsets")
+    st.markdown("### 2. Frequent Itemsets")
     st.write(
         "FP-Growth was used to discover frequently purchased item combinations."
     )
 
 with m3:
-    st.markdown("### 3️⃣ Association Rules")
+    st.markdown("### 3. Association Rules")
     st.write(
-        "Association rules were generated using support, confidence and lift."
     )
 
 with m4:
-    st.markdown("### 4️⃣ Visualization")
+    st.write("Association rules were generated using support, confidence and lift.")
+with m4:
     st.write(
         "Streamlit provides an interactive dashboard for analysis."
     )
-
 # ---------------------------------------------------------
 # METRICS EXPLANATION
 # ---------------------------------------------------------
 
-st.markdown(
-    '<div class="section-title">📌 Important Metrics</div>',
-    unsafe_allow_html=True
-)
+
+st.header("Important Metrics")
+
+
 
 st.write(
     "**Support:** Measures how frequently an itemset occurs in transactions."
@@ -441,12 +432,14 @@ st.write(
 # FOOTER
 # ---------------------------------------------------------
 
-st.markdown(
-    """
-    <div class="footer">
-        BDA Academic Project | Market Basket Analysis<br>
-        Apache Spark • PySpark • FP-Growth • Streamlit
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+st.caption("BDA Academic Project | Market Basket Analysis - Apache Spark - PySpark - FP-Growth - Streamlit")
+
+
+
+
+
+
+
+
+
+
