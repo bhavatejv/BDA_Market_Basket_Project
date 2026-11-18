@@ -207,7 +207,6 @@ with st.sidebar:
 df_frequent = pd.DataFrame()
 df_rules = pd.DataFrame()
 
-
 itemsets_loaded = False
 rules_loaded = False
 
@@ -314,6 +313,58 @@ def format_items(value):
 
 
 # ============================================================
+# PARSE ITEM LISTS
+# ============================================================
+
+def parse_items(value):
+
+    try:
+
+        if pd.isna(value):
+
+            return []
+
+        text = str(value).strip()
+
+        if text.startswith("[") and text.endswith("]"):
+
+            try:
+
+                parsed = json.loads(
+                    text.replace("'", '"')
+                )
+
+                if isinstance(parsed, list):
+
+                    return [
+                        str(x).strip()
+                        for x in parsed
+                    ]
+
+            except Exception:
+
+                text = (
+                    text
+                    .replace("[", "")
+                    .replace("]", "")
+                    .replace("'", "")
+                    .replace('"', "")
+                )
+
+        # Handle comma-separated values
+
+        return [
+            item.strip()
+            for item in text.split(",")
+            if item.strip()
+        ]
+
+    except Exception:
+
+        return []
+
+
+# ============================================================
 # FORMAT DATA
 # ============================================================
 
@@ -374,7 +425,9 @@ st.markdown(
 col1, col2, col3, col4 = st.columns(4)
 
 
+# ============================================================
 # KPI VALUES
+# ============================================================
 
 frequent_count = len(df_frequent)
 
@@ -409,7 +462,9 @@ else:
     best_confidence = 0
 
 
+# ============================================================
 # KPI 1
+# ============================================================
 
 with col1:
 
@@ -431,7 +486,9 @@ with col1:
     )
 
 
+# ============================================================
 # KPI 2
+# ============================================================
 
 with col2:
 
@@ -453,7 +510,9 @@ with col2:
     )
 
 
+# ============================================================
 # KPI 3
+# ============================================================
 
 with col3:
 
@@ -475,7 +534,9 @@ with col3:
     )
 
 
+# ============================================================
 # KPI 4
+# ============================================================
 
 with col4:
 
@@ -514,9 +575,7 @@ if not df_frequent.empty:
         placeholder="Example: Milk"
     )
 
-
     display_frequent = df_frequent.copy()
-
 
     if search_item:
 
@@ -529,7 +588,6 @@ if not df_frequent.empty:
             )
         ]
 
-
     display_frequent = (
         display_frequent
         .sort_values(
@@ -537,7 +595,6 @@ if not df_frequent.empty:
             ascending=False
         )
     )
-
 
     # Table
 
@@ -549,17 +606,15 @@ if not df_frequent.empty:
                 "freq": "Frequency"
             }
         ),
-        use_container_width=True,
+        width="stretch",
         hide_index=True
     )
-
 
     # Chart
 
     st.markdown(
         "### 📊 Top Frequent Itemsets"
     )
-
 
     chart_data = (
         display_frequent
@@ -568,11 +623,9 @@ if not df_frequent.empty:
         [["freq"]]
     )
 
-
     st.bar_chart(
         chart_data
     )
-
 
     # Download
 
@@ -584,7 +637,6 @@ if not df_frequent.empty:
         file_name="frequent_itemsets.csv",
         mime="text/csv"
     )
-
 
 else:
 
@@ -607,13 +659,11 @@ if not df_rules.empty:
 
     display_rules = df_rules.copy()
 
-
     # --------------------------------------------------------
     # FILTERS
     # --------------------------------------------------------
 
     filter1, filter2, filter3 = st.columns(3)
-
 
     with filter1:
 
@@ -625,7 +675,6 @@ if not df_rules.empty:
             0.05
         )
 
-
     with filter2:
 
         min_lift = st.number_input(
@@ -634,7 +683,6 @@ if not df_rules.empty:
             value=1.0,
             step=0.1
         )
-
 
     with filter3:
 
@@ -646,7 +694,6 @@ if not df_rules.empty:
             0.01
         )
 
-
     # Apply filters
 
     display_rules = display_rules[
@@ -654,18 +701,15 @@ if not df_rules.empty:
         >= min_confidence
     ]
 
-
     display_rules = display_rules[
         display_rules["lift"]
         >= min_lift
     ]
 
-
     display_rules = display_rules[
         display_rules["support"]
         >= min_support
     ]
-
 
     display_rules = (
         display_rules
@@ -675,7 +719,6 @@ if not df_rules.empty:
         )
     )
 
-
     if not display_rules.empty:
 
         # ----------------------------------------------------
@@ -684,21 +727,17 @@ if not df_rules.empty:
 
         table = display_rules.copy()
 
-
         table["Confidence"] = (
             table["confidence"] * 100
         ).round(2).astype(str) + "%"
-
 
         table["Lift"] = (
             table["lift"].round(2)
         )
 
-
         table["Support"] = (
             table["support"].round(4)
         )
-
 
         st.dataframe(
             table[
@@ -710,10 +749,9 @@ if not df_rules.empty:
                     "Lift"
                 ]
             ],
-            use_container_width=True,
+            width="stretch",
             hide_index=True
         )
-
 
         # ----------------------------------------------------
         # CONFIDENCE CHART
@@ -722,7 +760,6 @@ if not df_rules.empty:
         st.markdown(
             "### 🎯 Top Rules by Confidence"
         )
-
 
         confidence_chart = (
             display_rules
@@ -734,7 +771,6 @@ if not df_rules.empty:
             .copy()
         )
 
-
         confidence_chart["Rule"] = (
             confidence_chart[
                 "If Customer Buys"
@@ -745,19 +781,16 @@ if not df_rules.empty:
             ]
         )
 
-
         confidence_chart["Confidence %"] = (
             confidence_chart["confidence"]
             * 100
         )
-
 
         st.bar_chart(
             confidence_chart
             .set_index("Rule")
             [["Confidence %"]]
         )
-
 
         # ----------------------------------------------------
         # LIFT CHART
@@ -766,7 +799,6 @@ if not df_rules.empty:
         st.markdown(
             "### 📈 Top Rules by Lift"
         )
-
 
         lift_chart = (
             display_rules
@@ -778,7 +810,6 @@ if not df_rules.empty:
             .copy()
         )
 
-
         lift_chart["Rule"] = (
             lift_chart[
                 "If Customer Buys"
@@ -789,13 +820,11 @@ if not df_rules.empty:
             ]
         )
 
-
         st.bar_chart(
             lift_chart
             .set_index("Rule")
             [["lift"]]
         )
-
 
         # ----------------------------------------------------
         # DOWNLOAD
@@ -810,18 +839,387 @@ if not df_rules.empty:
             mime="text/csv"
         )
 
-
     else:
 
         st.warning(
             "No association rules match the selected filters."
         )
 
-
 else:
 
     st.info(
         "No association rule results available."
+    )
+
+
+# ============================================================
+# INTERACTIVE PRODUCT RECOMMENDATION
+# ============================================================
+
+st.markdown(
+    '<div class="section-title">🔎 Interactive Product Recommendation</div>',
+    unsafe_allow_html=True
+)
+
+st.write(
+    "Select any combination of products to discover "
+    "recommendations generated from the FP-Growth association rules."
+)
+
+
+if not df_rules.empty:
+
+    # --------------------------------------------------------
+    # GET ALL PRODUCTS
+    # --------------------------------------------------------
+
+    all_products = set()
+
+    for value in df_rules["antecedent"]:
+
+        all_products.update(
+            parse_items(value)
+        )
+
+    for value in df_rules["consequent"]:
+
+        all_products.update(
+            parse_items(value)
+        )
+
+    all_products = sorted(
+        all_products,
+        key=lambda x: x.lower()
+    )
+
+
+    # --------------------------------------------------------
+    # PRODUCT SELECTION
+    # --------------------------------------------------------
+
+    selected_products = st.multiselect(
+        "🛒 Select products purchased by the customer",
+        options=all_products,
+        placeholder="Choose one or more products..."
+    )
+
+
+    # --------------------------------------------------------
+    # MATCHING MODE
+    # --------------------------------------------------------
+
+    match_mode = st.radio(
+        "Recommendation matching",
+        [
+            "Exact combination",
+            "Contains selected products"
+        ],
+        horizontal=True
+    )
+
+
+    # --------------------------------------------------------
+    # SHOW SELECTED PRODUCTS
+    # --------------------------------------------------------
+
+    if selected_products:
+
+        st.write(
+            "**Selected products:** "
+            + ", ".join(selected_products)
+        )
+
+
+        selected_set = set(
+            selected_products
+        )
+
+
+        # ----------------------------------------------------
+        # FIND MATCHING RULES
+        # ----------------------------------------------------
+
+        recommendation_rules = []
+
+
+        for _, rule in df_rules.iterrows():
+
+            antecedent_items = set(
+                parse_items(
+                    rule["antecedent"]
+                )
+            )
+
+            consequent_items = set(
+                parse_items(
+                    rule["consequent"]
+                )
+            )
+
+
+            # Exact combination
+
+            if match_mode == "Exact combination":
+
+                is_match = (
+                    antecedent_items
+                    == selected_set
+                )
+
+
+            # Contains selected products
+
+            else:
+
+                is_match = (
+                    selected_set
+                    .issubset(
+                        antecedent_items
+                    )
+                )
+
+
+            if is_match:
+
+                # Only recommend products
+                # not already selected
+
+                new_recommendations = (
+                    consequent_items
+                    - selected_set
+                )
+
+
+                if new_recommendations:
+
+                    recommendation_rules.append(
+                        rule
+                    )
+
+
+        # ----------------------------------------------------
+        # RESULTS
+        # ----------------------------------------------------
+
+        if recommendation_rules:
+
+            recommendation_df = pd.DataFrame(
+                recommendation_rules
+            )
+
+
+            recommendation_df = (
+                recommendation_df
+                .sort_values(
+                    [
+                        "confidence",
+                        "lift"
+                    ],
+                    ascending=False
+                )
+            )
+
+
+            st.success(
+                f"Found {len(recommendation_df)} "
+                "matching recommendation rule(s)."
+            )
+
+
+            # ------------------------------------------------
+            # BEST RECOMMENDATION
+            # ------------------------------------------------
+
+            best_rule = (
+                recommendation_df.iloc[0]
+            )
+
+
+            recommendation = (
+                format_items(
+                    best_rule["consequent"]
+                )
+            )
+
+
+            confidence = (
+                best_rule["confidence"]
+                * 100
+            )
+
+
+            support = (
+                best_rule["support"]
+                * 100
+            )
+
+
+            lift = best_rule["lift"]
+
+
+            # ------------------------------------------------
+            # RECOMMENDATION METRICS
+            # ------------------------------------------------
+
+            rec_col1, rec_col2, rec_col3, rec_col4 = (
+                st.columns(4)
+            )
+
+
+            with rec_col1:
+
+                st.metric(
+                    "🛍️ Recommendation",
+                    recommendation
+                )
+
+
+            with rec_col2:
+
+                st.metric(
+                    "🎯 Confidence",
+                    f"{confidence:.2f}%"
+                )
+
+
+            with rec_col3:
+
+                st.metric(
+                    "📊 Support",
+                    f"{support:.2f}%"
+                )
+
+
+            with rec_col4:
+
+                st.metric(
+                    "📈 Lift",
+                    f"{lift:.2f}"
+                )
+
+
+            # ------------------------------------------------
+            # EXPLANATION
+            # ------------------------------------------------
+
+            selected_text = ", ".join(
+                selected_products
+            )
+
+
+            st.info(
+                f"Customers who purchase "
+                f"**{selected_text}** are associated "
+                f"with purchasing "
+                f"**{recommendation}** "
+                f"with a confidence of "
+                f"**{confidence:.2f}%**."
+            )
+
+
+            # ------------------------------------------------
+            # ALL MATCHING RULES
+            # ------------------------------------------------
+
+            st.markdown(
+                "### 📋 Matching Recommendations"
+            )
+
+
+            recommendation_table = (
+                recommendation_df.copy()
+            )
+
+
+            recommendation_table[
+                "If Customer Buys"
+            ] = (
+                recommendation_table[
+                    "antecedent"
+                ].apply(format_items)
+            )
+
+
+            recommendation_table[
+                "Recommend"
+            ] = (
+                recommendation_table[
+                    "consequent"
+                ].apply(format_items)
+            )
+
+
+            recommendation_table[
+                "Confidence"
+            ] = (
+                recommendation_table[
+                    "confidence"
+                ]
+                * 100
+            ).round(2).astype(str) + "%"
+
+
+            recommendation_table[
+                "Support"
+            ] = (
+                recommendation_table[
+                    "support"
+                ]
+                * 100
+            ).round(2).astype(str) + "%"
+
+
+            recommendation_table[
+                "Lift"
+            ] = (
+                recommendation_table[
+                    "lift"
+                ].round(2)
+            )
+
+
+            st.dataframe(
+                recommendation_table[
+                    [
+                        "If Customer Buys",
+                        "Recommend",
+                        "Support",
+                        "Confidence",
+                        "Lift"
+                    ]
+                ],
+                width="stretch",
+                hide_index=True
+            )
+
+
+        else:
+
+            st.warning(
+                "No association rule was found "
+                "for the selected combination."
+            )
+
+
+            st.write(
+                "Try another product combination "
+                "or change the matching mode."
+            )
+
+
+    else:
+
+        st.info(
+            "👆 Select one or more products above "
+            "to generate recommendations."
+        )
+
+
+else:
+
+    st.info(
+        "No association rules are available "
+        "for recommendation."
     )
 
 
@@ -861,7 +1259,9 @@ if not df_rules.empty:
     )
 
 
-    # Strongest association
+    # --------------------------------------------------------
+    # STRONGEST ASSOCIATION
+    # --------------------------------------------------------
 
     st.markdown(
         f"""
@@ -899,7 +1299,9 @@ if not df_rules.empty:
     )
 
 
-    # Highest confidence
+    # --------------------------------------------------------
+    # HIGHEST CONFIDENCE
+    # --------------------------------------------------------
 
     st.markdown(
         f"""
@@ -935,7 +1337,9 @@ if not df_rules.empty:
     )
 
 
-    # Business recommendation
+    # --------------------------------------------------------
+    # BUSINESS RECOMMENDATION
+    # --------------------------------------------------------
 
     st.markdown(
         """
@@ -1126,4 +1530,4 @@ st.markdown(
     </div>
     """,
     unsafe_allow_html=True
-)
+)ss
